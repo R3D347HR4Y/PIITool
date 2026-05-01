@@ -24,6 +24,7 @@ export function makeTool(
     gatewayPort: 4317,
     reviewMode: "auto",
     failClosed: true,
+    sessionTtlMs: 3_600_000,
     security: {
       mode: "policy",
       model: "qwen2.5:7b",

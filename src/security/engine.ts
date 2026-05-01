@@ -2,7 +2,7 @@ import type { SecurityAgent } from "./agent.ts";
 import { evaluatePolicy } from "./policy.ts";
 import type { ScopeRunner } from "./scope.ts";
 import { DirectScopeRunner } from "./scope.ts";
-import { containsSecretAlias } from "./secrets.ts";
+import { containsRawSecret, containsSecretAlias } from "./secrets.ts";
 import { SecurityStore } from "./store.ts";
 import type {
   ParamMatch,
@@ -107,9 +107,10 @@ export class SecurityEngine {
     const rules = this.store.listRules();
     const policy = evaluatePolicy(rules, ctx);
     if (policy.matched && policy.decision) {
+      const payload = ctx.direction === "in" ? ctx.input : ctx.output;
       if (
         policy.decision === "allow" &&
-        containsSecretAlias(ctx.direction === "in" ? ctx.input : ctx.output) &&
+        (containsSecretAlias(payload) || containsRawSecret(payload)) &&
         policy.rule?.effect !== "allow_always_call_params"
       ) {
         const pending = this.store.createPending(ctx, {
@@ -152,6 +153,24 @@ export class SecurityEngine {
         pendingId: pending.id,
         requiredScope: agentDecision.requiredScope,
       };
+    }
+
+    if (agentDecision.decision === "allow") {
+      const payload = ctx.direction === "in" ? ctx.input : ctx.output;
+      if (containsSecretAlias(payload) || containsRawSecret(payload)) {
+        const pending = this.store.createPending(ctx, {
+          ...agentDecision,
+          decision: "pending_approval",
+          reasons: [...agentDecision.reasons, "llm_allow_overridden_secret_detected"],
+        });
+        return {
+          decision: "pending_approval",
+          source: "agent",
+          riskLevel: "high",
+          reasons: [...agentDecision.reasons, "llm_allow_overridden_secret_detected"],
+          pendingId: pending.id,
+        };
+      }
     }
 
     return this.audit(ctx, agentDecision.decision, "agent", agentDecision.riskLevel, agentDecision.reasons);

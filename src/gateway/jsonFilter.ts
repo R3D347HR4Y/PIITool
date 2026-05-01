@@ -16,6 +16,10 @@ export async function anonymizeJson(tool: PiiTool, value: unknown): Promise<unkn
   return mapStrings(value, async (text) => (await tool.anonymize(text)).text);
 }
 
-export async function deanonymizeJson(tool: PiiTool, value: unknown): Promise<unknown> {
-  return mapStrings(value, async (text) => (await tool.deanonymize(text)).text);
+export async function deanonymizeJson(
+  tool: PiiTool,
+  value: unknown,
+  options: { includeKinds?: string[]; excludeKinds?: string[] } = {},
+): Promise<unknown> {
+  return mapStrings(value, async (text) => (await tool.deanonymize(text, options)).text);
 }

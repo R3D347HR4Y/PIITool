@@ -6,6 +6,7 @@ import { encodeMcpFrame, readMcpFrames } from "./framing.ts";
 import { OllamaSecurityAgent } from "../security/agent.ts";
 import { SecurityEngine } from "../security/engine.ts";
 import { SecurityStore } from "../security/store.ts";
+import { containsRawSecret } from "../security/secrets.ts";
 
 const downstream = process.env.PIITOOL_MCP_COMMAND;
 if (!downstream) {
@@ -35,7 +36,7 @@ const child = Bun.spawn(["/bin/sh", "-lc", downstream], {
   stdout: "pipe",
   stderr: "inherit",
 });
-const callTargets = new Map<unknown, string>();
+const callContexts = new Map<unknown, { targetName: string; targetType: string; input: unknown }>();
 
 async function pumpClientToServer(): Promise<void> {
   const clientWriter = Bun.stdout.writer();
@@ -61,8 +62,23 @@ async function pumpClientToServer(): Promise<void> {
           continue;
         }
       }
-      callTargets.set(filteredMessage.id, targetName);
+      callContexts.set(filteredMessage.id, {
+        targetName,
+        targetType: message.method === "tools/call" ? "mcp_tool" : "mcp_resource",
+        input: filteredMessage.params ?? filteredMessage,
+      });
       filteredMessage = (await deanonymizeJson(tool, filteredMessage)) as Record<string, unknown>;
+      if (containsRawSecret(filteredMessage)) {
+        const rules = security.store.listRules();
+        const hasParamRule = rules.some(
+          (r) => r.targetName === targetName && r.effect === "allow_always_call_params",
+        );
+        if (!hasParamRule) {
+          clientWriter.write(encodeMcpFrame(mcpError(filteredMessage.id, "Blocked: deanonymized payload contains raw secret without param-specific approval")));
+          clientWriter.flush();
+          continue;
+        }
+      }
     }
     child.stdin.write(encodeMcpFrame(filteredMessage));
   }
@@ -73,26 +89,25 @@ async function pumpServerToClient(): Promise<void> {
   const writer = Bun.stdout.writer();
   for await (const message of readMcpFrames(child.stdout)) {
     const filtered = await anonymizeJson(tool, message);
-    const targetName = callTargets.get(message.id) ?? "unknown";
-    if (targetName !== "unknown") {
-      const evaluation = await security.evaluateOut({
-        targetType: "mcp_tool",
-        targetName,
-        input: {},
-        output: filtered,
-      });
-      if (evaluation.decision === "deny") {
-        writer.write(encodeMcpFrame(mcpError(message.id, `Security denied output: ${evaluation.reasons.join("; ")}`)));
+    const ctx = callContexts.get(message.id);
+    const targetName = ctx?.targetName ?? "unknown";
+    const evaluation = await security.evaluateOut({
+      targetType: ctx?.targetType as any ?? "mcp_tool",
+      targetName,
+      input: ctx?.input ?? {},
+      output: filtered,
+    });
+    if (evaluation.decision === "deny") {
+      writer.write(encodeMcpFrame(mcpError(message.id, `Security denied output: ${evaluation.reasons.join("; ")}`)));
+      writer.flush();
+      continue;
+    }
+    if (evaluation.decision === "pending_approval") {
+      const approval = await security.waitForApproval(evaluation.pendingId!);
+      if (approval !== "approved") {
+        writer.write(encodeMcpFrame(mcpError(message.id, `Security output ${approval}`)));
         writer.flush();
         continue;
-      }
-      if (evaluation.decision === "pending_approval") {
-        const approval = await security.waitForApproval(evaluation.pendingId!);
-        if (approval !== "approved") {
-          writer.write(encodeMcpFrame(mcpError(message.id, `Security output ${approval}`)));
-          writer.flush();
-          continue;
-        }
       }
     }
     writer.write(encodeMcpFrame(filtered));

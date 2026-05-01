@@ -13,6 +13,8 @@ export interface PiiToolConfig {
   gatewayPort: number;
   reviewMode: "auto" | "queue";
   failClosed: boolean;
+  gatewayPassword?: string;
+  sessionTtlMs: number;
   security: {
     mode: "off" | "policy" | "agent" | "agent_with_human";
     model: string;
@@ -41,6 +43,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PiiToolConfig 
     gatewayPort: Number(env.PIITOOL_GATEWAY_PORT ?? 4317),
     reviewMode: (env.PIITOOL_REVIEW_MODE as PiiToolConfig["reviewMode"]) ?? "auto",
     failClosed: env.PIITOOL_FAIL_CLOSED === "1",
+    gatewayPassword: env.PIITOOL_GATEWAY_PASSWORD || undefined,
+    sessionTtlMs: Number(env.PIITOOL_SESSION_TTL_MS ?? 3_600_000),
     security: {
       mode: (env.PIITOOL_SECURITY_MODE as PiiToolConfig["security"]["mode"]) ?? "policy",
       model: env.PIITOOL_SECURITY_MODEL ?? "qwen2.5:7b",

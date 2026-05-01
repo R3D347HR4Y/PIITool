@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join, extname } from "node:path";
 import { PiiTool } from "../core/piitool.ts";
 import { loadConfig } from "../core/config.ts";
 import { anonymizeJson, deanonymizeJson } from "./jsonFilter.ts";
@@ -5,8 +7,19 @@ import { OllamaSecurityAgent } from "../security/agent.ts";
 import { SecurityEngine } from "../security/engine.ts";
 import { LegislatorService } from "../security/legislator.ts";
 import { SecurityStore } from "../security/store.ts";
+import { AuthManager } from "./auth.ts";
 
 const config = loadConfig();
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+};
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -31,7 +44,7 @@ async function proxyChat(instance: PiiTool, cfg: typeof config, body: Record<str
   });
 
   const payload = await upstream.json();
-  const deanonymized = await deanonymizeJson(instance, payload);
+  const deanonymized = await deanonymizeJson(instance, payload, { excludeKinds: ["secret"] });
   if (!wantedStream) return json(deanonymized, upstream.status);
 
   return new Response(`data: ${JSON.stringify(deanonymized)}\n\ndata: [DONE]\n\n`, {
@@ -41,6 +54,16 @@ async function proxyChat(instance: PiiTool, cfg: typeof config, body: Record<str
       "cache-control": "no-cache",
     },
   });
+}
+
+const PUBLIC_DIR = join(import.meta.dir, "public");
+
+function serveStatic(pathname: string): Response | null {
+  let filePath = join(PUBLIC_DIR, pathname === "/" ? "index.html" : pathname);
+  if (!existsSync(filePath)) return null;
+  const stat = Bun.file(filePath);
+  const mime = MIME[extname(filePath)] ?? "application/octet-stream";
+  return new Response(stat, { headers: { "content-type": mime, "cache-control": "no-cache" } });
 }
 
 export function createGatewayHandler(instance: PiiTool, cfg = config): (request: Request) => Promise<Response> {
@@ -61,13 +84,56 @@ export function createGatewayHandler(instance: PiiTool, cfg = config): (request:
     },
   );
   const legislator = new LegislatorService(securityStore, undefined, cfg.security.legislatorMaxHistory);
+  const auth = cfg.gatewayPassword ? new AuthManager(cfg.gatewayPassword, cfg.sessionTtlMs) : null;
 
   return async (request) => {
     const url = new URL(request.url);
+
     try {
       if (request.method === "GET" && url.pathname === "/health") {
         return json({ ok: true });
       }
+
+      if (url.pathname === "/auth/login" && request.method === "POST") {
+        if (!auth) return json({ error: "auth not configured" }, 400);
+        const { password } = (await request.json()) as { password?: string };
+        if (!password) return json({ error: "password required" }, 400);
+        const token = auth.login(password);
+        if (!token) return json({ error: "invalid password" }, 401);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": `piitool_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(cfg.sessionTtlMs / 1000)}`,
+          },
+        });
+      }
+
+      if (url.pathname === "/auth/logout" && request.method === "POST") {
+        if (auth) {
+          const token = auth.tokenFromRequest(request);
+          if (token) auth.logout(token);
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": "piitool_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+          },
+        });
+      }
+
+      if (url.pathname === "/auth/me" && request.method === "GET") {
+        if (!auth) return json({ authenticated: true, authRequired: false });
+        return json({ authenticated: auth.validate(request), authRequired: true });
+      }
+
+      if (auth && url.pathname.startsWith("/v1/")) {
+        if (!auth.validate(request)) {
+          return json({ error: "unauthorized" }, 401);
+        }
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/filter/anonymize") {
         const { text } = (await request.json()) as { text?: string };
         if (typeof text !== "string") return json({ error: "text must be string" }, 400);
@@ -138,6 +204,11 @@ export function createGatewayHandler(instance: PiiTool, cfg = config): (request:
         const deleted = securityStore.deleteRule(securityRuleMatch[1]!);
         return json(deleted ?? { error: "not found" }, deleted ? 200 : 404);
       }
+      if (request.method === "GET" && url.pathname === "/v1/security/decisions") {
+        const limit = Number(url.searchParams.get("limit") ?? 50);
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        return json(securityStore.listDecisions(limit, offset));
+      }
       if (request.method === "POST" && url.pathname === "/v1/security/legislator/message") {
         const { message } = (await request.json()) as { message?: string };
         if (!message) return json({ error: "message required" }, 400);
@@ -155,6 +226,33 @@ export function createGatewayHandler(instance: PiiTool, cfg = config): (request:
       if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
         return proxyChat(instance, cfg, (await request.json()) as Record<string, unknown>);
       }
+      if (request.method === "GET" && url.pathname === "/v1/stats") {
+        const entities = instance.vault.listEntities();
+        const pendingReviews = instance.vault.listReviewItems("pending");
+        const pendingSecurity = securityStore.listPending("pending");
+        const recentDecisions = securityStore.listDecisions(10, 0);
+        const rules = securityStore.listRules();
+        return json({
+          entityCount: entities.length,
+          pendingReviewCount: pendingReviews.length,
+          pendingSecurityCount: pendingSecurity.length,
+          ruleCount: rules.length,
+          recentDecisions: recentDecisions.length,
+        });
+      }
+
+      if (request.method === "GET") {
+        const staticResponse = serveStatic(url.pathname);
+        if (staticResponse) {
+          if (auth && url.pathname !== "/" && !url.pathname.endsWith(".html")) {
+            return staticResponse;
+          }
+          return staticResponse;
+        }
+        const indexResponse = serveStatic("/");
+        if (indexResponse) return indexResponse;
+      }
+
       return json({ error: "not found" }, 404);
     } catch (error) {
       if (cfg.failClosed) return json({ error: "PIITool failed closed" }, 500);

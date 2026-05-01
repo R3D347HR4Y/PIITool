@@ -34,6 +34,7 @@ export class OllamaSecurityAgent implements SecurityAgent {
   async decide(ctx: ToolCallContext, rules: SecurityRule[]): Promise<SecurityAgentDecision> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 30_000);
+    const sanitized = sanitizedContext(ctx);
     try {
       const response = await fetch(`${this.options.baseUrl.replace(/\/$/, "")}/api/chat`, {
         method: "POST",
@@ -53,14 +54,22 @@ export class OllamaSecurityAgent implements SecurityAgent {
             },
             {
               role: "user",
-              content: JSON.stringify({ ctx: sanitizedContext(ctx), rules }),
+              content: JSON.stringify({ ctx: sanitized.ctx, rules }),
             },
           ],
         }),
       });
       if (!response.ok) throw new Error(`SecurityAgent failed: ${response.status}`);
       const payload = (await response.json()) as { message?: { content?: string } };
-      return SecurityAgentDecisionSchema.parse(JSON.parse(payload.message?.content ?? "{}")) as SecurityAgentDecision;
+      const parsed = SecurityAgentDecisionSchema.parse(JSON.parse(payload.message?.content ?? "{}")) as SecurityAgentDecision;
+      if (sanitized.truncated && parsed.decision === "allow") {
+        return {
+          decision: "pending_approval",
+          riskLevel: "high",
+          reasons: [...parsed.reasons, "context_truncated_requires_human"],
+        };
+      }
+      return parsed;
     } catch {
       return {
         decision: this.options.defaultDecision ?? "pending_approval",
@@ -84,11 +93,16 @@ export class StaticSecurityAgent implements SecurityAgent {
   }
 }
 
-function sanitizedContext(ctx: ToolCallContext): ToolCallContext {
+function sanitizedContext(ctx: ToolCallContext): { ctx: ToolCallContext; truncated: boolean } {
+  const inputTruncated = JSON.stringify(ctx.input ?? null).length > 4_000;
+  const outputTruncated = JSON.stringify(ctx.output ?? null).length > 4_000;
   return {
-    ...ctx,
-    input: truncate(ctx.input),
-    output: truncate(ctx.output),
+    ctx: {
+      ...ctx,
+      input: truncate(ctx.input),
+      output: truncate(ctx.output),
+    },
+    truncated: inputTruncated || outputTruncated,
   };
 }
 

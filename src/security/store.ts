@@ -196,10 +196,10 @@ export class SecurityStore {
     return this.listDecisions(1)[0]!;
   }
 
-  listDecisions(limit = 50): SecurityDecisionAudit[] {
+  listDecisions(limit = 50, offset = 0): SecurityDecisionAudit[] {
     return this.db
-      .query<AuditRow, [number]>("select * from security_decisions order by created_at desc limit ?")
-      .all(limit)
+      .query<AuditRow, [number, number]>("select * from security_decisions order by created_at desc limit ? offset ?")
+      .all(limit, offset)
       .map(auditFromRow);
   }
 

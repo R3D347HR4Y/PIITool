@@ -7,6 +7,10 @@ import { OllamaSecurityAgent } from "../security/agent.ts";
 import { SecurityEngine } from "../security/engine.ts";
 import { LegislatorService } from "../security/legislator.ts";
 import { SecurityStore } from "../security/store.ts";
+import { wrapMcpConfig } from "./mcp-wrap.ts";
+import { runSetup } from "./setup.ts";
+import { runDoctor } from "./doctor.ts";
+import { runUnwrap } from "./unwrap.ts";
 
 async function readInput(args: string[]): Promise<string> {
   const fileIndex = args.indexOf("--file");
@@ -105,6 +109,32 @@ async function main(): Promise<void> {
       }
       throw new Error("entities usage: search <query> | whitelist <id> [true|false] | merge <sourceId> <targetId>");
     }
+    if (command === "mcp-wrap") {
+      const inputPath = rest[0];
+      if (!inputPath) throw new Error("mcp-wrap requires an input path");
+      const dryRun = rest.includes("--dry-run");
+      const outputIdx = rest.indexOf("--output");
+      const outputPath = outputIdx >= 0 ? rest[outputIdx + 1] : undefined;
+      const result = wrapMcpConfig(inputPath, { dryRun, outputPath });
+      print({
+        wrapped: result.wrapped,
+        skipped: result.skipped,
+        ...(dryRun ? { output: result.output } : {}),
+      });
+      return;
+    }
+    if (command === "setup") {
+      await runSetup();
+      return;
+    }
+    if (command === "doctor") {
+      await runDoctor();
+      return;
+    }
+    if (command === "unwrap") {
+      runUnwrap(rest);
+      return;
+    }
     if (command === "security") {
       const [area, action, ...args] = rest;
       if (area === "pending") {
@@ -148,6 +178,10 @@ async function main(): Promise<void> {
   piitool security legislator "<instruction>"
   piitool security rule-changes list
   piitool security rule-changes revert <id>
+  piitool mcp-wrap <path> [--output <path>] [--dry-run]
+  piitool setup                          Interactive installer
+  piitool doctor                         Health check
+  piitool unwrap [--harness name|--mcp]  Restore backed-up configs
 
 Env:
   PIITOOL_VAULT_PATH=./piitool.sqlite

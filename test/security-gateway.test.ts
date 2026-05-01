@@ -17,6 +17,7 @@ function cfg(): PiiToolConfig {
     gatewayPort: 4317,
     reviewMode: "auto",
     failClosed: false,
+    sessionTtlMs: 3_600_000,
     security: {
       mode: "policy",
       model: "missing",
