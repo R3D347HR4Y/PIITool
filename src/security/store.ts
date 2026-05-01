@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { stableId } from "../core/normalize.ts";
+import { redactSecretsForGateway } from "./secrets.ts";
 import type {
   LegislatorDecision,
   ScopeRequest,
@@ -146,8 +147,8 @@ export class SecurityStore {
         ctx.direction,
         ctx.targetType,
         ctx.targetName,
-        JSON.stringify(ctx.input ?? null),
-        ctx.output === undefined ? null : JSON.stringify(ctx.output),
+        JSON.stringify(redactSecretsForGateway(ctx.input ?? null)),
+        ctx.output === undefined ? null : JSON.stringify(redactSecretsForGateway(ctx.output)),
         JSON.stringify(agentDecision),
       );
     return this.getPending(id)!;

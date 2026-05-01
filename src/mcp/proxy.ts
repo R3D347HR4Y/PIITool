@@ -39,11 +39,7 @@ const callTargets = new Map<unknown, string>();
 async function pumpClientToServer(): Promise<void> {
   const clientWriter = Bun.stdout.writer();
   for await (const message of readMcpFrames(Bun.stdin.stream())) {
-    const filtered =
-      message.method === "tools/call" || message.method === "resources/read"
-        ? await deanonymizeJson(tool, message)
-        : message;
-    const filteredMessage = filtered as Record<string, unknown>;
+    let filteredMessage = message as Record<string, unknown>;
     if (message.method === "tools/call" || message.method === "resources/read") {
       const targetName = targetNameForMcp(filteredMessage);
       const evaluation = await security.evaluateIn({
@@ -65,6 +61,7 @@ async function pumpClientToServer(): Promise<void> {
         }
       }
       callTargets.set(filteredMessage.id, targetName);
+      filteredMessage = (await deanonymizeJson(tool, filteredMessage)) as Record<string, unknown>;
     }
     child.stdin.write(encodeMcpFrame(filteredMessage));
   }

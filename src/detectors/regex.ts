@@ -34,6 +34,9 @@ const COMMON_DOMAINS_SKIP = new Set([
 ]);
 
 const patterns: Array<{ kind: EntityKind; re: RegExp; confidence: number; formatHint?: string }> = [
+  { kind: "secret", re: /\bPIITOOL_SECRET_[A-Fa-f0-9]{12}\b/gi, confidence: 1, formatHint: "secret_alias" },
+  { kind: "secret", re: /\b(?:[A-Z][A-Z0-9_]*(?:API|TOKEN|SECRET|KEY|PASSWORD|PRIVATE)[A-Z0-9_]*)\s*=\s*["']?[^"'\s]{8,}["']?/g, confidence: 0.99, formatHint: "env_secret" },
+  { kind: "secret", re: /\b(?:sk-[A-Za-z0-9_-]{16,}|sk_live_[A-Za-z0-9_-]{16,}|sk_test_[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})\b/g, confidence: 0.99, formatHint: "api_key" },
   { kind: "email", re: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, confidence: 0.99, formatHint: "email" },
   { kind: "url", re: /\bhttps?:\/\/[^\s<>"')]+/gi, confidence: 0.95, formatHint: "url" },
   { kind: "phone", re: /(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)/g, confidence: 0.85, formatHint: "phone" },

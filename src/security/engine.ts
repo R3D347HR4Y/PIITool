@@ -2,6 +2,7 @@ import type { SecurityAgent } from "./agent.ts";
 import { evaluatePolicy } from "./policy.ts";
 import type { ScopeRunner } from "./scope.ts";
 import { DirectScopeRunner } from "./scope.ts";
+import { containsSecretAlias } from "./secrets.ts";
 import { SecurityStore } from "./store.ts";
 import type {
   ParamMatch,
@@ -106,6 +107,24 @@ export class SecurityEngine {
     const rules = this.store.listRules();
     const policy = evaluatePolicy(rules, ctx);
     if (policy.matched && policy.decision) {
+      if (
+        policy.decision === "allow" &&
+        containsSecretAlias(ctx.direction === "in" ? ctx.input : ctx.output) &&
+        policy.rule?.effect !== "allow_always_call_params"
+      ) {
+        const pending = this.store.createPending(ctx, {
+          decision: "pending_approval",
+          riskLevel: "high",
+          reasons: ["secret_alias_requires_param_specific_approval"],
+        });
+        return {
+          decision: "pending_approval",
+          source: "policy",
+          riskLevel: "high",
+          reasons: ["secret_alias_requires_param_specific_approval"],
+          pendingId: pending.id,
+        };
+      }
       return this.audit(ctx, policy.decision, "policy", policy.decision === "allow" ? "low" : "high", policy.reasons, policy.rule);
     }
 

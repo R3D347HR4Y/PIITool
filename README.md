@@ -1,6 +1,6 @@
 # PIITool
 
-Local PII anonymization gateway for AI workflows. PIITool replaces real people, companies, emails, domains, phones, URLs, handles, addresses, IDs, and media-derived text with stable fake mirrors before data reaches remote models. Responses can be deanonymized back to real values through the local vault.
+Local PII anonymization gateway for AI workflows. PIITool replaces real people, companies, emails, domains, phones, URLs, handles, addresses, IDs, API keys, sensitive environment variables, and media-derived text with stable fake mirrors before data reaches remote models. Responses can be deanonymized back to real values through the local vault.
 
 ## What Works
 
@@ -11,6 +11,7 @@ Local PII anonymization gateway for AI workflows. PIITool replaces real people, 
 - OpenAI-compatible gateway at `/v1/chat/completions`.
 - Direct filter API at `/v1/filter/anonymize` and `/v1/filter/deanonymize`.
 - MCP stdio proxy that filters tool calls/resources through the same core.
+- Secret aliases like `PIITOOL_SECRET_123456789012` for API keys/env values, with SecurityAgent approval before tool-call deanonymization.
 
 ## Setup
 
@@ -102,7 +103,7 @@ Wrap an MCP stdio server:
 PIITOOL_MCP_COMMAND='npx -y @modelcontextprotocol/server-filesystem /Users/red' bun run mcp
 ```
 
-Configure your MCP client to run PIITool instead of the downstream server. Tool-call args/resources are deanonymized before upstream calls; upstream responses are anonymized before they reach the model.
+Configure your MCP client to run PIITool instead of the downstream server. Tool-call args/resources are checked by SecurityAgent first; only approved calls are deanonymized before upstream execution. Upstream responses are anonymized before they reach the model.
 
 ## Review Gateway
 
@@ -171,6 +172,8 @@ SecurityAgent governs tool calls and MCP calls after PIITool has handled PII. A 
 - `out`: tool output is safe.
 - `inout`: both directions are safe.
 - no matching rule: follows `PIITOOL_SECURITY_MODE`.
+
+Secrets are stricter than normal PII. API keys and sensitive env assignments are exposed to LLMs only as stable aliases such as `PIITOOL_SECRET_123456789012`. Broad allow rules do not auto-release these aliases into tool calls; a secret-bearing call needs explicit param-specific approval (`approve-always-params`) or a fresh human/agent approval. Pending gateway payloads redact raw secret-looking values before they are displayed.
 
 Modes:
 

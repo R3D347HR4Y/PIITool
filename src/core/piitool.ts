@@ -49,7 +49,7 @@ export class PiiTool {
     return { text: output, eventId, spans: detected.spans, replacements };
   }
 
-  async deanonymize(text: string): Promise<FilterResult> {
+  async deanonymize(text: string, options: { includeKinds?: string[]; excludeKinds?: string[] } = {}): Promise<FilterResult> {
     const detected = await this.detector.detect(text);
     const replacements: Replacement[] = [];
     let output = text;
@@ -57,6 +57,8 @@ export class PiiTool {
     for (const span of [...detected.spans].sort((a, b) => b.start - a.start)) {
       const replacement = this.vault.reverseLookup(span.text);
       if (!replacement) continue;
+      if (options.includeKinds && !options.includeKinds.includes(replacement.kind)) continue;
+      if (options.excludeKinds?.includes(replacement.kind)) continue;
       replacements.unshift(replacement);
       output = output.slice(0, span.start) + replacement.real + output.slice(span.end);
     }

@@ -240,6 +240,13 @@ export function generateMirrorId(
   return `${prefix}${digits(seed, digitCount)}`;
 }
 
+export function generateMirrorSecret(
+  realValue: string,
+  entityId: string,
+): string {
+  return `PIITOOL_SECRET_${digits(`secret:${entityId}:${realValue}`, 12)}`;
+}
+
 export function generateMirrorValue(
   kind: EntityKind,
   realValue: string,
@@ -267,6 +274,8 @@ export function generateMirrorValue(
       return generateMirrorId(realValue, entityId, ctx);
     case "asset":
       return `asset-${digits(`asset:${entityId}`, 8)}`;
+    case "secret":
+      return generateMirrorSecret(realValue, entityId);
   }
 }
 

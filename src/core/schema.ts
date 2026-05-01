@@ -11,6 +11,7 @@ export const EntityKindSchema = z.enum([
   "address",
   "id",
   "asset",
+  "secret",
 ]);
 
 export type EntityKind = z.infer<typeof EntityKindSchema>;
