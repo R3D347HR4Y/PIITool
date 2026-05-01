@@ -163,6 +163,81 @@ bun run src/cli/index.ts entities whitelist <entity-id> true
 bun run src/cli/index.ts entities merge <source-id> <target-id>
 ```
 
+## SecurityAgent
+
+SecurityAgent governs tool calls and MCP calls after PIITool has handled PII. A `supersafe` rule can allow a call without local LLM approval:
+
+- `in`: input/tool arguments are safe.
+- `out`: tool output is safe.
+- `inout`: both directions are safe.
+- no matching rule: follows `PIITOOL_SECURITY_MODE`.
+
+Modes:
+
+- `PIITOOL_SECURITY_MODE=off`: allow everything.
+- `PIITOOL_SECURITY_MODE=policy`: allow/deny only from stored rules, otherwise `PIITOOL_SECURITY_DEFAULT`.
+- `PIITOOL_SECURITY_MODE=agent`: ask local SecurityAgent when no rule matches.
+- `PIITOOL_SECURITY_MODE=agent_with_human`: unresolved checks become pending approvals in the gateway.
+
+Add a supersafe rule:
+
+```sh
+curl -X POST http://localhost:4317/v1/security/rules \
+  -H "content-type: application/json" \
+  -d '{
+    "targetType":"mcp_tool",
+    "targetName":"filesystem.read_file",
+    "direction":"inout",
+    "effect":"allow_always_call",
+    "paramMatch":{"path":{"under":["/Users/red/PIITool"],"readonly":true}},
+    "scope":{"type":"readonly_fs","filesystem":["/Users/red/PIITool"],"network":false},
+    "priority":10
+  }'
+```
+
+Pending approvals:
+
+```sh
+curl "http://localhost:4317/v1/security/pending?status=pending"
+curl -X POST http://localhost:4317/v1/security/pending/<id>/approve
+curl -X POST http://localhost:4317/v1/security/pending/<id>/deny
+curl -X POST http://localhost:4317/v1/security/pending/<id>/approve-always-call
+curl -X POST http://localhost:4317/v1/security/pending/<id>/approve-always-params
+curl -X POST http://localhost:4317/v1/security/pending/<id>/approve-always-global
+```
+
+Security CLI:
+
+```sh
+bun run src/cli/index.ts security pending list pending
+bun run src/cli/index.ts security pending approve <id>
+bun run src/cli/index.ts security pending deny <id>
+bun run src/cli/index.ts security rules list
+bun run src/cli/index.ts security rules add '<json>'
+bun run src/cli/index.ts security rules delete <id>
+```
+
+### LegislatorAgent
+
+LegislatorAgent is user-only. It cannot execute tools. It only reads recent security decisions + rules, writes SecurityAgent rules, and records every change as a published diff.
+
+```sh
+curl -X POST http://localhost:4317/v1/security/legislator/message \
+  -H "content-type: application/json" \
+  -d '{"message":"allow \"filesystem.read_file\""}'
+
+curl http://localhost:4317/v1/security/rule-changes
+curl -X POST http://localhost:4317/v1/security/rule-changes/<id>/revert
+```
+
+CLI:
+
+```sh
+bun run src/cli/index.ts security legislator 'allow "filesystem.read_file"'
+bun run src/cli/index.ts security rule-changes list
+bun run src/cli/index.ts security rule-changes revert <id>
+```
+
 ## Configuration
 
 Use `config.example.env` as the template. Main variables:
@@ -177,6 +252,12 @@ Use `config.example.env` as the template. Main variables:
 - `PIITOOL_GATEWAY_PORT`: local gateway port.
 - `PIITOOL_REVIEW_MODE`: `auto` or `queue` for review item creation.
 - `PIITOOL_MCP_COMMAND`: downstream MCP stdio command.
+- `PIITOOL_SECURITY_MODE`: `off`, `policy`, `agent`, or `agent_with_human`.
+- `PIITOOL_SECURITY_MODEL`: local model used by SecurityAgent.
+- `PIITOOL_SECURITY_TIMEOUT_MS`: pending approval timeout.
+- `PIITOOL_SECURITY_DEFAULT`: fallback decision when policy has no match.
+- `PIITOOL_LEGISLATOR_MODEL`: local model intended for LegislatorAgent.
+- `PIITOOL_LEGISLATOR_MAX_HISTORY`: max security decisions exposed to LegislatorAgent.
 
 ## Development
 
@@ -198,5 +279,7 @@ Both configs use Bun's inspector through `.vscode/launch.json`.
 
 - Streaming gateway returns a buffered SSE response, not true token-by-token streaming yet.
 - Review queue is API/CLI only; no browser UI yet.
+- Security gateway is API/CLI only; no Matrix/multiroom integration yet.
+- Security scopes are stored/evaluated as metadata; Docker/container execution is not implemented yet.
 - Media inputs are converted to text first; raw images/audio are not forwarded.
 - Detection quality depends on regex coverage and the local Ollama model when `local_llm` or `hybrid` mode is used.

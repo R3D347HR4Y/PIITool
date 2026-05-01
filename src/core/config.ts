@@ -12,6 +12,15 @@ export interface PiiToolConfig {
   gatewayPort: number;
   reviewMode: "auto" | "queue";
   failClosed: boolean;
+  security: {
+    mode: "off" | "policy" | "agent" | "agent_with_human";
+    model: string;
+    timeoutMs: number;
+    defaultDecision: "allow" | "deny" | "pending_approval";
+    token?: string;
+    legislatorModel: string;
+    legislatorMaxHistory: number;
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): PiiToolConfig {
@@ -30,5 +39,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PiiToolConfig 
     gatewayPort: Number(env.PIITOOL_GATEWAY_PORT ?? 4317),
     reviewMode: (env.PIITOOL_REVIEW_MODE as PiiToolConfig["reviewMode"]) ?? "auto",
     failClosed: env.PIITOOL_FAIL_CLOSED === "1",
+    security: {
+      mode: (env.PIITOOL_SECURITY_MODE as PiiToolConfig["security"]["mode"]) ?? "policy",
+      model: env.PIITOOL_SECURITY_MODEL ?? "qwen2.5:7b",
+      timeoutMs: Number(env.PIITOOL_SECURITY_TIMEOUT_MS ?? 600_000),
+      defaultDecision: (env.PIITOOL_SECURITY_DEFAULT as PiiToolConfig["security"]["defaultDecision"]) ?? "pending_approval",
+      token: env.PIITOOL_SECURITY_TOKEN || undefined,
+      legislatorModel: env.PIITOOL_LEGISLATOR_MODEL ?? env.PIITOOL_SECURITY_MODEL ?? "qwen2.5:7b",
+      legislatorMaxHistory: Number(env.PIITOOL_LEGISLATOR_MAX_HISTORY ?? 50),
+    },
   };
 }

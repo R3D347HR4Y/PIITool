@@ -24,6 +24,14 @@ export function makeTool(
     gatewayPort: 4317,
     reviewMode: "auto",
     failClosed: true,
+    security: {
+      mode: "policy",
+      model: "qwen2.5:7b",
+      timeoutMs: 100,
+      defaultDecision: "pending_approval",
+      legislatorModel: "qwen2.5:7b",
+      legislatorMaxHistory: 50,
+    },
     ...rest,
   });
 }

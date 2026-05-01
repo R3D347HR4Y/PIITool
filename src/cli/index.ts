@@ -3,6 +3,10 @@ import { PiiTool, spansToPreview } from "../core/piitool.ts";
 import { loadConfig } from "../core/config.ts";
 import { filterImageDescription } from "../media/image.ts";
 import { filterAudioTranscript } from "../media/audio.ts";
+import { OllamaSecurityAgent } from "../security/agent.ts";
+import { SecurityEngine } from "../security/engine.ts";
+import { LegislatorService } from "../security/legislator.ts";
+import { SecurityStore } from "../security/store.ts";
 
 async function readInput(args: string[]): Promise<string> {
   const fileIndex = args.indexOf("--file");
@@ -19,6 +23,21 @@ async function main(): Promise<void> {
   const [command = "help", ...rest] = Bun.argv.slice(2);
   const config = loadConfig();
   const tool = new PiiTool(config);
+  const securityStore = new SecurityStore(config.vaultPath);
+  const securityEngine = new SecurityEngine(
+    securityStore,
+    new OllamaSecurityAgent({
+      baseUrl: config.ollama.baseUrl,
+      model: config.security.model,
+      defaultDecision: config.security.defaultDecision,
+    }),
+    {
+      mode: config.security.mode,
+      timeoutMs: config.security.timeoutMs,
+      defaultDecision: config.security.defaultDecision,
+    },
+  );
+  const legislator = new LegislatorService(securityStore, undefined, config.security.legislatorMaxHistory);
   try {
     if (command === "detect") {
       const text = await readInput(rest);
@@ -85,6 +104,27 @@ async function main(): Promise<void> {
       }
       throw new Error("entities usage: search <query> | whitelist <id> [true|false] | merge <sourceId> <targetId>");
     }
+    if (command === "security") {
+      const [area, action, ...args] = rest;
+      if (area === "pending") {
+        if (action === "list") return print(securityStore.listPending((args[0] || undefined) as never));
+        if (action === "approve" && args[0]) return print(securityEngine.approvePending(args[0]));
+        if (action === "deny" && args[0]) return print(securityEngine.denyPending(args[0]));
+      }
+      if (area === "rules") {
+        if (action === "list") return print(securityStore.listRules());
+        if (action === "add") return print(securityStore.addRule(JSON.parse(args.join(" "))));
+        if (action === "delete" && args[0]) return print(securityStore.deleteRule(args[0]));
+      }
+      if (area === "legislator") {
+        return print(await legislator.handleMessage([action, ...args].filter(Boolean).join(" ")));
+      }
+      if (area === "rule-changes") {
+        if (action === "list") return print(securityStore.listRuleChanges());
+        if (action === "revert" && args[0]) return print(securityStore.revertRuleChange(args[0]));
+      }
+      throw new Error("security usage: pending list|approve|deny, rules list|add|delete, legislator <instruction>, rule-changes list|revert");
+    }
     print(`Usage:
   piitool detect [--file path]|[text]
   piitool anon [--file path]|[text]
@@ -98,6 +138,15 @@ async function main(): Promise<void> {
   piitool entities search <query>
   piitool entities whitelist <id> [true|false]
   piitool entities merge <sourceId> <targetId>
+  piitool security pending list [status]
+  piitool security pending approve <id>
+  piitool security pending deny <id>
+  piitool security rules list
+  piitool security rules add '<json>'
+  piitool security rules delete <id>
+  piitool security legislator "<instruction>"
+  piitool security rule-changes list
+  piitool security rule-changes revert <id>
 
 Env:
   PIITOOL_VAULT_PATH=./piitool.sqlite
@@ -106,6 +155,7 @@ Env:
   PIITOOL_DETECTOR_MODEL=qwen2.5:7b`);
   } finally {
     tool.close();
+    securityStore.close();
   }
 }
 

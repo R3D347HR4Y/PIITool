@@ -1,6 +1,10 @@
 import { PiiTool } from "../core/piitool.ts";
 import { loadConfig } from "../core/config.ts";
 import { anonymizeJson, deanonymizeJson } from "./jsonFilter.ts";
+import { OllamaSecurityAgent } from "../security/agent.ts";
+import { SecurityEngine } from "../security/engine.ts";
+import { LegislatorService } from "../security/legislator.ts";
+import { SecurityStore } from "../security/store.ts";
 
 const config = loadConfig();
 
@@ -40,6 +44,23 @@ async function proxyChat(instance: PiiTool, cfg: typeof config, body: Record<str
 }
 
 export function createGatewayHandler(instance: PiiTool, cfg = config): (request: Request) => Promise<Response> {
+  const securityStore = new SecurityStore(cfg.vaultPath);
+  const securityEngine = new SecurityEngine(
+    securityStore,
+    new OllamaSecurityAgent({
+      baseUrl: cfg.ollama.baseUrl,
+      model: cfg.security.model,
+      timeoutMs: 30_000,
+      defaultDecision: cfg.security.defaultDecision,
+    }),
+    {
+      mode: cfg.security.mode,
+      timeoutMs: cfg.security.timeoutMs,
+      defaultDecision: cfg.security.defaultDecision,
+    },
+  );
+  const legislator = new LegislatorService(securityStore, undefined, cfg.security.legislatorMaxHistory);
+
   return async (request) => {
     const url = new URL(request.url);
     try {
@@ -89,6 +110,46 @@ export function createGatewayHandler(instance: PiiTool, cfg = config): (request:
           if (!targetEntityId) return json({ error: "targetEntityId required" }, 400);
           return json(instance.vault.mergeEntities(id!, targetEntityId));
         }
+      }
+      if (request.method === "GET" && url.pathname === "/v1/security/pending") {
+        const status = url.searchParams.get("status") ?? undefined;
+        return json(securityStore.listPending(status as never));
+      }
+      const securityPendingMatch = url.pathname.match(/^\/v1\/security\/pending\/([^/]+)(?:\/([^/]+))?$/);
+      if (securityPendingMatch) {
+        const [, id, action] = securityPendingMatch;
+        if (request.method === "GET" && !action) return json(securityStore.getPending(id!) ?? { error: "not found" }, securityStore.getPending(id!) ? 200 : 404);
+        if (request.method === "POST" && action === "approve") return json(securityEngine.approvePending(id!));
+        if (request.method === "POST" && action === "deny") return json(securityEngine.denyPending(id!));
+        if (request.method === "POST" && action === "approve-always-call") return json(securityEngine.approvePending(id!, "allow_always_call"));
+        if (request.method === "POST" && action === "deny-always-call") return json(securityEngine.denyPending(id!, "deny_always_call"));
+        if (request.method === "POST" && action === "approve-always-params") return json(securityEngine.approvePending(id!, "allow_always_call_params"));
+        if (request.method === "POST" && action === "approve-always-global") return json(securityEngine.approvePending(id!, "allow_always_global"));
+      }
+      if (request.method === "GET" && url.pathname === "/v1/security/rules") {
+        return json(securityStore.listRules());
+      }
+      if (request.method === "POST" && url.pathname === "/v1/security/rules") {
+        return json(securityStore.addRule((await request.json()) as never));
+      }
+      const securityRuleMatch = url.pathname.match(/^\/v1\/security\/rules\/([^/]+)$/);
+      if (securityRuleMatch && request.method === "DELETE") {
+        const deleted = securityStore.deleteRule(securityRuleMatch[1]!);
+        return json(deleted ?? { error: "not found" }, deleted ? 200 : 404);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/security/legislator/message") {
+        const { message } = (await request.json()) as { message?: string };
+        if (!message) return json({ error: "message required" }, 400);
+        return json(await legislator.handleMessage(message));
+      }
+      if (request.method === "GET" && url.pathname === "/v1/security/rule-changes") {
+        return json(securityStore.listRuleChanges());
+      }
+      const ruleChangeMatch = url.pathname.match(/^\/v1\/security\/rule-changes\/([^/]+)(?:\/([^/]+))?$/);
+      if (ruleChangeMatch) {
+        const [, id, action] = ruleChangeMatch;
+        if (request.method === "GET" && !action) return json(securityStore.getRuleChange(id!) ?? { error: "not found" }, securityStore.getRuleChange(id!) ? 200 : 404);
+        if (request.method === "POST" && action === "revert") return json(securityStore.revertRuleChange(id!));
       }
       if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
         return proxyChat(instance, cfg, (await request.json()) as Record<string, unknown>);
