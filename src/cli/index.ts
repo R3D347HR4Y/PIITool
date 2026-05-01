@@ -29,6 +29,7 @@ async function main(): Promise<void> {
     new OllamaSecurityAgent({
       baseUrl: config.ollama.baseUrl,
       model: config.security.model,
+      keepAlive: config.ollama.keepAlive,
       defaultDecision: config.security.defaultDecision,
     }),
     {

@@ -2,6 +2,7 @@ export interface ProviderConfig {
   baseUrl: string;
   apiKey?: string;
   model?: string;
+  keepAlive?: string;
 }
 
 export interface PiiToolConfig {
@@ -30,6 +31,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PiiToolConfig 
     ollama: {
       baseUrl: env.OLLAMA_BASE_URL ?? "http://localhost:11434",
       model: env.PIITOOL_DETECTOR_MODEL ?? "qwen2.5:7b",
+      keepAlive: env.PIITOOL_OLLAMA_KEEP_ALIVE ?? "10m",
     },
     upstream: {
       baseUrl: env.PIITOOL_UPSTREAM_BASE_URL ?? "https://api.openai.com",

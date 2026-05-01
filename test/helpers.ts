@@ -19,7 +19,7 @@ export function makeTool(
   return new PiiTool({
     vaultPath,
     detectorMode: "regex",
-    ollama: { baseUrl: "http://localhost:11434", model: "qwen2.5:7b" },
+    ollama: { baseUrl: "http://localhost:11434", model: "qwen2.5:7b", keepAlive: "10m" },
     upstream: { baseUrl: "http://localhost:9999" },
     gatewayPort: 4317,
     reviewMode: "auto",

@@ -250,6 +250,7 @@ Use `config.example.env` as the template. Main variables:
 - `PIITOOL_DETECTOR_MODE`: `regex`, `local_llm`, or `hybrid`.
 - `OLLAMA_BASE_URL`: local Ollama endpoint.
 - `PIITOOL_DETECTOR_MODEL`: local detector model.
+- `PIITOOL_OLLAMA_KEEP_ALIVE`: Ollama model residency after requests, default `10m`.
 - `PIITOOL_UPSTREAM_BASE_URL`: OpenAI-compatible upstream.
 - `PIITOOL_UPSTREAM_API_KEY`: upstream API key.
 - `PIITOOL_GATEWAY_PORT`: local gateway port.
@@ -269,12 +270,35 @@ bun test
 bun run typecheck
 ```
 
+Optional real-LLM integration tests are skipped by default. They require Ollama and the configured model:
+
+```sh
+ollama pull qwen2.5:7b
+bun run test:llm
+```
+
+First Ollama run can be slow while the model loads; LLM tests allow up to 120 seconds per test.
+
+Override model or endpoint when needed:
+
+```sh
+PIITOOL_TEST_LLM=1 \
+PIITOOL_OLLAMA_BASE_URL=http://localhost:11434 \
+PIITOOL_OLLAMA_MODEL=qwen2.5:7b \
+PIITOOL_OLLAMA_KEEP_ALIVE=10m \
+bun test test/llm-integration.test.ts
+```
+
+PIITool sends Ollama `keep_alive` on detector and SecurityAgent calls, so repeated LLM tests avoid model reload while Ollama keeps the model resident. Prompt tokens still take time to ingest on each stateless request; keep static rules/prompts compact and let policy rules bypass LLM whenever possible.
+
 ### Debug Tests In Cursor/VSCode
 
 Open Run and Debug, then choose:
 
 - `Bun: Debug All Tests` to run every test with breakpoints.
-- `Bun: Debug Current Test File` to run only the focused test file.
+- `Bun: Debug Focused .test.ts File` to run only the focused test file. Focus must be on a `*.test.ts` file; if README is focused, Bun will try to parse Markdown as a test.
+- `Bun: Debug LLM Integration Tests` to run real Ollama detector/SecurityAgent tests.
+- `Bun: Debug Focused .test.ts File with LLM` to run focused tests with `PIITOOL_TEST_LLM=1`.
 
 Both configs use Bun's inspector through `.vscode/launch.json`.
 

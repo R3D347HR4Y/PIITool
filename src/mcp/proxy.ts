@@ -21,6 +21,7 @@ const security = new SecurityEngine(
     baseUrl: config.ollama.baseUrl,
     model: config.security.model,
     timeoutMs: 30_000,
+    keepAlive: config.ollama.keepAlive,
     defaultDecision: config.security.defaultDecision,
   }),
   {

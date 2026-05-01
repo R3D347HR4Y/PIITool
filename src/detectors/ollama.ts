@@ -6,6 +6,7 @@ export interface OllamaDetectorOptions {
   baseUrl: string;
   model: string;
   timeoutMs?: number;
+  keepAlive?: string;
 }
 
 export class OllamaDetector implements Detector {
@@ -21,6 +22,7 @@ export class OllamaDetector implements Detector {
         signal: controller.signal,
         body: JSON.stringify({
           model: this.options.model,
+          keep_alive: this.options.keepAlive,
           stream: false,
           format: z.toJSONSchema(DetectorOutputSchema),
           options: { temperature: 0 },
@@ -28,7 +30,7 @@ export class OllamaDetector implements Detector {
             {
               role: "system",
               content:
-                "Extract PII only. Return JSON matching schema. Use character offsets in original text. Include people, companies, emails, domains, phones, URLs, handles, addresses, IDs, and relationships.",
+                "Extract PII only. Return JSON matching schema. Use character offsets in original text. Include people, companies, emails, domains, phones, URLs, handles, addresses, IDs, API keys, sensitive environment variables, secret aliases, and relationships.",
             },
             { role: "user", content: text },
           ],

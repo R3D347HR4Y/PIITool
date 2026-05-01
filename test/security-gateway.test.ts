@@ -12,7 +12,7 @@ function cfg(): PiiToolConfig {
   return {
     vaultPath: path,
     detectorMode: "regex",
-    ollama: { baseUrl: "http://127.0.0.1:1", model: "missing" },
+    ollama: { baseUrl: "http://127.0.0.1:1", model: "missing", keepAlive: "10m" },
     upstream: { baseUrl: "http://localhost:9999" },
     gatewayPort: 4317,
     reviewMode: "auto",

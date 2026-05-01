@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:llm": "PIITOOL_TEST_LLM=1 bun test test/llm-integration.test.ts",
     "start": "bun run src/gateway/server.ts",
     "mcp": "bun run src/mcp/proxy.ts"
   },

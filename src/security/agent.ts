@@ -26,6 +26,7 @@ export class OllamaSecurityAgent implements SecurityAgent {
       baseUrl: string;
       model: string;
       timeoutMs?: number;
+      keepAlive?: string;
       defaultDecision?: "allow" | "deny" | "pending_approval";
     },
   ) {}
@@ -40,6 +41,7 @@ export class OllamaSecurityAgent implements SecurityAgent {
         signal: controller.signal,
         body: JSON.stringify({
           model: this.options.model,
+          keep_alive: this.options.keepAlive,
           stream: false,
           format: z.toJSONSchema(SecurityAgentDecisionSchema),
           options: { temperature: 0 },
@@ -47,7 +49,7 @@ export class OllamaSecurityAgent implements SecurityAgent {
             {
               role: "system",
               content:
-                "You are SecurityAgent. You never execute tools. Decide if a toolcall input/output is allowed, denied, or needs human approval. Use only provided rules and payload. Return JSON only.",
+                "You are SecurityAgent. You never execute tools. Decide if a toolcall input/output is allowed, denied, or needs human approval. Treat API keys, env secrets, and PIITOOL_SECRET_* aliases as high-risk: allow only for appropriate secret/config destinations, deny public posting/email/blog leaks, otherwise ask human. Use only provided rules and payload. Return JSON only.",
             },
             {
               role: "user",

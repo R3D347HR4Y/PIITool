@@ -79,6 +79,7 @@ export function createDetector(config: PiiToolConfig): Detector {
   const ollama = new OllamaDetector({
     baseUrl: config.ollama.baseUrl,
     model: config.ollama.model ?? "qwen2.5:7b",
+    keepAlive: config.ollama.keepAlive,
   });
   if (config.detectorMode === "local_llm") return ollama;
   return new HybridDetector([regex, ollama]);

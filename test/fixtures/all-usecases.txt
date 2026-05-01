@@ -1,0 +1,42 @@
+# PIITool All Usecases Fixture
+
+This fixture is intentionally synthetic. Values are fake but shaped like real data.
+Use it for manual CLI/gateway checks and automated regression tests.
+
+## Core PII
+
+Person: Alice Martin met Bob Martin and Carla Stone.
+Company: Alice works at Acme Labs and Bob consults for Globex Records.
+Email: alice.martin@acmelabs.com and support@globexrecords.eu.
+Phone: +1 (415) 555-0100 and +33 1 44 55 66 77.
+Domain: private-tenant.internaltools.dev.
+URL: https://portal.acmelabs.com/customers/alice-martin?ticket=12345
+Handle: @alice_private
+Identifier: TAX id: FR-ABCD-123456789
+Identifier: VAT # EU-998877665
+Identifier: SSN 123-45-6789
+Identifier: SIREN 552100554
+
+## Secrets And Environment Variables
+
+OpenAI key: OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456
+GitHub token: GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz123456
+AWS access key: AWS_ACCESS_KEY_ID=AKIA1234567890ABCDEF
+Slack token: SLACK_BOT_TOKEN=xoxb-123456789012-123456789012-abcdefghijklmnop
+Existing PIITool secret alias: PIITOOL_SECRET_123456789012
+
+## SecurityAgent Destinations
+
+Allowed target example: secrets.set should receive PIITOOL_SECRET_123456789012 only after approval.
+Blocked target example: blog.publish must not publish PIITOOL_SECRET_123456789012.
+Blocked target example: email.send must not send OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456.
+
+## Review Gateway Candidates
+
+Possible duplicate person: Alicia Martin may need merge review with Alice Martin.
+Possible duplicate company: Acme Laboratory may need merge review with Acme Labs.
+
+## LLM/Media-Oriented Cases
+
+Address-style text: 221B Baker Street, London NW1 6XE.
+Asset-style text: internal invoice INV-2026-00042 and customer file customer-alice-martin.pdf.

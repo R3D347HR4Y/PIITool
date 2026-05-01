@@ -51,6 +51,7 @@ export function createGatewayHandler(instance: PiiTool, cfg = config): (request:
       baseUrl: cfg.ollama.baseUrl,
       model: cfg.security.model,
       timeoutMs: 30_000,
+      keepAlive: cfg.ollama.keepAlive,
       defaultDecision: cfg.security.defaultDecision,
     }),
     {

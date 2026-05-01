@@ -15,13 +15,47 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Bun: Debug Current Test File",
+      "name": "Bun: Debug Focused .test.ts File",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["--inspect-brk", "test", "${file}"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Bun: Debug LLM Integration Tests",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--inspect-brk", "test", "test/llm-integration.test.ts"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "PIITOOL_TEST_LLM": "1",
+        "PIITOOL_OLLAMA_BASE_URL": "http://localhost:11434",
+        "PIITOOL_OLLAMA_MODEL": "qwen2.5:7b",
+        "PIITOOL_OLLAMA_KEEP_ALIVE": "10m"
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Bun: Debug Focused .test.ts File with LLM",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--inspect-brk", "test", "${file}"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "PIITOOL_TEST_LLM": "1",
+        "PIITOOL_OLLAMA_BASE_URL": "http://localhost:11434",
+        "PIITOOL_OLLAMA_MODEL": "qwen2.5:7b",
+        "PIITOOL_OLLAMA_KEEP_ALIVE": "10m"
+      }
     }
   ]
 }
