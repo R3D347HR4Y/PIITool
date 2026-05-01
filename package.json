@@ -1,0 +1,22 @@
+{
+  "name": "piitool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "piitool": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "start": "bun run src/gateway/server.ts",
+    "mcp": "bun run src/mcp/proxy.ts"
+  },
+  "dependencies": {
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "latest"
+  }
+}
